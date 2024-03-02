@@ -1,0 +1,4 @@
+example[boolean]:primary:null:unique:binary:unsigned:zero:increment:generated(default)
+id[id]
+user_id=User.id
+tables*table.example_id

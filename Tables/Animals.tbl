@@ -1,0 +1,8 @@
+name[varchar(255)]:null
+skin[varchar(255)]:null
+gastronomy[varchar(255)]:null
+age[int]:null
+size[int]:null
+stupidity[int]:null
+inteligence[int]:null
+

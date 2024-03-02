@@ -1,0 +1,3 @@
+name[varchar(255)]:null
+surname[varchar(255)]:null
+what[varchar(255)]:null

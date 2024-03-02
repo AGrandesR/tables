@@ -1,0 +1,2 @@
+id[id]
+mail[varchar(255)]:null:primary:increment
