@@ -89,30 +89,36 @@ class TrueTablesManager {
     }
 
     public function get(string $tableName, array $search =[], int $limit=0, string $flag='') {
-        $pdo=PDOhandler::startTransaction($flag, true);
-        $tableName=trim($pdo->quote($tableName)," '\"");
-        $sql = "SELECT * FROM $tableName";
-        $first=true;
-        foreach ($search as $key => $value) {
-            if($first) $sql.=" WHERE ";
-
-            $key=trim($pdo->quote($key)," '\"");
-            $value=$pdo->quote($value);
-
-            $sql.=" $key = $value ";
-        }
-
-        $stmt=$pdo->prepare($sql);
-        $result = $stmt->execute();
-        $pdo->commit();
-
-        $dataToReturn=[];
-        if($result) {
-            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                $dataToReturn[]=new Table($tableName,$this->tables[$tableName],$row,$flag);
+        try {
+            $pdo=PDOhandler::startTransaction($flag, true);
+            $tableName=trim($pdo->quote($tableName)," '\"");
+            $sql = "SELECT * FROM $tableName";
+            $first=true;
+            foreach ($search as $key => $value) {
+                if($first) $sql.=" WHERE ";
+    
+                $key=trim($pdo->quote($key)," '\"");
+                $value=$pdo->quote($value);
+    
+                $sql.=" $key = $value ";
             }
+    
+            $stmt=$pdo->prepare($sql);
+            $result = $stmt->execute();
+            $pdo->commit();
+    
+            $dataToReturn=[];
+            if($result) {
+                while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                    $dataToReturn[]=new Table($tableName,$this->tables[$tableName],$row,$flag);
+                }
+            }
+            return $dataToReturn;
+        } catch(PDOException $e) {
+            list($globalConnections, $globalHistory, $globalActive) = PDOhandler::getGlobalNames($flag);
+            $GLOBALS[$globalHistory][]="*: $sql";
+            return [];
         }
-        return $dataToReturn;
     }
 
 
