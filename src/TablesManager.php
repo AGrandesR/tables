@@ -43,6 +43,7 @@ class TrueTablesManager {
     }
 
     public function new(string $tableName, string $flag='') {
+        if(!isset($this->tables[$tableName])) throw new Exception("The table you want to create is not defined in the Tables folder (or tables folder is not defined)");
         return new Table($tableName, $this->tables[$tableName], [], $flag);
     }
 
