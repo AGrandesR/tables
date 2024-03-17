@@ -90,6 +90,7 @@ class TrueTablesManager {
 
     public function get(string $tableName, array $search =[], int $limit=0, string $flag='') {
         try {
+            $sql='';
             $pdo=PDOhandler::startTransaction($flag, true);
             $tableName=trim($pdo->quote($tableName)," '\"");
             $sql = "SELECT * FROM $tableName";
