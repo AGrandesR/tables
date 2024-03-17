@@ -27,7 +27,6 @@ class TrueTablesManager {
             while(($tableFile = readdir($dir)) !== false) {
                 if ($tableFile != "." && $tableFile != "..") {
                     $fileWithPath = $path . DIRECTORY_SEPARATOR . $tableFile;
-                    echo $fileWithPath ."\n";
 
                     if (is_file($fileWithPath)) {
                         // Leer el contenido del file
