@@ -8,19 +8,21 @@ use PDOException;
 
 class TablesManager {
     public static function __callStatic($method, $arguments) {
-        if(!isset($GLOBALS['x-open-source-table-manager'])) $GLOBALS['x-open-source-table-manager'] = new TrueTablesManager();
-        if (!method_exists($GLOBALS['x-open-source-table-manager'], $method)) throw new Exception("$method doesn't exist");
-        return $GLOBALS['x-open-source-table-manager']->$method(...$arguments);
+        if(!isset($GLOBALS['os-agrandesr-tables::table-manager'])) $GLOBALS['os-agrandesr-tables::table-manager'] = new TrueTablesManager();
+        if (!method_exists($GLOBALS['os-agrandesr-tables::table-manager'], $method)) throw new Exception("$method doesn't exist");
+        return $GLOBALS['os-agrandesr-tables::table-manager']->$method(...$arguments);
     }
 }
 
 class TrueTablesManager {
-    use TablesManagerActions;
-
-    private array $tables=[];
-    private array $tasks=[];
+    private array $tables=[]; //Tables contains the data required to create the class Table for each definition of a table in the tables folder.
+    //private array $tasks=[]; //This save all the SQL queries [UPDATE, INSERT] for the TRANSACTION
+    private array $rollbacks=[]; //For each task we create a SQL to return the file to previous state
     private $error;
 
+    /**
+     * This functions add all the Tables definitions from a folder. This allow to create Table(Class) with the correct data.
+     */
     public function setFolder($path) : bool {
         if(is_dir($path)) {
             $dir = opendir($path);
@@ -41,57 +43,18 @@ class TrueTablesManager {
         return false;
     }
 
+    /**
+     * This function create a new table class
+     */
     public function new(string $tableName, string $flag='') {
         if(!isset($this->tables[$tableName])) throw new Exception("The table you want to create is not defined in the Tables folder (or tables folder is not defined)");
-        return new Table($tableName, $this->tables[$tableName], [], $flag);
-    }
-
-    public function save(string $flag='') : bool {
-        try {
-            foreach ($this->tasks as $task) {
-                list($action, $table) = $task;
-
-                if($flag!==$flag) continue;
-                
-                $id=$table->getId();
-                if($action=='upsert' && !is_null($id)) { //UPDATE
-                    $this->update($table,$flag);
-                } elseif ($action=='upsert') { //INSERT
-                    $this->insert($table,$flag);
-                } elseif ($action=='delete') { //DELETE
-                    $this->delete($table,$flag);
-                } else {
-                    throw new Exception("Exception: $action");die;
-                }
-            }
-            return PDOhandler::commit($flag) ? true : false;
-        } catch(Error | Exception | PDOException $e) {
-            PDOhandler::rollback($flag);
-            throw $e;            
-        }
-        return false;
-    }
-    
-    private function newTableField(Table &$table, $fieldName) {
-        list($globalConnections, $globalHistory, $globalActive) = PDOhandler::getGlobalNames($table->flag());
-
-        try {
-            $uniques=[];
-            $foreigns=[];
-
-            $fieldInfo=$table->info();
-            $sql="ALTER TABLE ".$table->name()." ADD COLUMN $fieldName " .$fieldInfo[$fieldName]['type'];
-            $GLOBALS[$globalHistory][]="*: $sql";
-            PDOhandler::execute($sql,[],$table->flag());
-        } catch (PDOException $e) {
-            $this->errorHandler($e,$table,'newTableField');
-        }
+        return new Row($tableName, $this->tables[$tableName], [], $flag);
     }
 
     public function get(string $tableName, array $search =[], int $limit=0, string $flag='') {
         try {
             $sql='';
-            $pdo=PDOhandler::startTransaction($flag, true);
+            $pdo=Connections::get($flag);
             $tableName=trim($pdo->quote($tableName)," '\"");
             $sql = "SELECT * FROM $tableName";
             $first=true;
@@ -106,31 +69,29 @@ class TrueTablesManager {
     
             $stmt=$pdo->prepare($sql);
             $result = $stmt->execute();
-            $pdo->commit();
     
             $dataToReturn=[];
             if($result) {
                 while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                    $dataToReturn[]=new Table($tableName,$this->tables[$tableName],$row,$flag);
+                    $dataToReturn[]=new Row($tableName,$this->tables[$tableName],$row,$flag);
                 }
             }
             return $dataToReturn;
         } catch(PDOException $e) {
-            list($globalConnections, $globalHistory, $globalActive) = PDOhandler::getGlobalNames($flag);
-            $GLOBALS[$globalHistory][]="*: $sql";
-            return [];
+            throw $e;
         }
     }
 
-
-    public function addTask(string $action, Table &$table) : int {
-        $taskId=Count($this->tasks);
-        $this->tasks[$taskId]=[$action, $table];
-        return $taskId;
+    /**
+     * This is to get only one element that match with the search
+     */
+    public function getOne(string $tableName, array $search =[], string $flag='') {
+        $data = $this->get( $tableName, $search, 1, $flag);
+        return (Count($data)>0) ? $data : false;
     }
-
-    public function updateTask(int $taskId, string $action, Table &$table) : void {
-        $this->tasks[$taskId]=[$action, $table];
+    public function getById(string $tableName, int $id, string $flag='') {
+        $data = $this->get( $tableName, ['id'=>$id], 1, $flag);
+        return (Count($data)>0) ? $data[0] : false;
     }
 
     private function parseContent($content) {
@@ -152,9 +113,10 @@ class TrueTablesManager {
             $line=trim($line," \t\n\r");
             //$line = str_replace([' ','\t','\n','\r'],'',$line);
             if($line=='') continue;
+            //echo $line . "\n";
             list($rawField, $rawData) = explode('[', $line);
             list($type, $rawData) = explode(']',$rawData);
-            if(strpos($rawData,'=')!==false) list($rawData, $relation) = explode('=',$rawData);
+            if(strpos($rawData,'$')!==false) list($rawData, $relation) = explode('$',$rawData);
             if(strpos($rawData, ':')!==false) $options = explode(':',$rawData);
 
             $fieldName=trim($rawField);
@@ -170,11 +132,22 @@ class TrueTablesManager {
                 $fields[$fieldName]['zero']=in_array('zero',$options);
                 $fields[$fieldName]['increment']=in_array('increment',$options);
                 $fields[$fieldName]['generated(default)']=in_array('generated(default)',$options);
-                $fields[$fieldName]['related']=$relation??false;
+                if($relation??false) {
+                    list($table, $field)=explode('.',$relation);
+                    $fields[$fieldName]['related']=[
+                        'table'=>$table,
+                        'field'=>$field,
+                        'from'=>$fieldName
+                    ];
+                }
             }
         }
 
         return $fields;
+    }
+
+    public function rollback() {
+        echo "\nMassive rollback\n";
     }
 }
 
