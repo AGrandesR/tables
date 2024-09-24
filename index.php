@@ -7,7 +7,7 @@ require 'vendor/autoload.php';
 $_ENV['DB_TYPE']='mysql';
 $_ENV['DB_HOST']='localhost';
 $_ENV['DB_USER']='root';
-$_ENV['DB_PASS']='2ga259lb';
+$_ENV['DB_PASS']='2t3x7689';
 $_ENV['DB_DTBS']='entitymaster';
 $_ENV['DB_PORT']='5555';
 
